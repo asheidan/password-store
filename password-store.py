@@ -1,8 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: UTF-8
 
 import argparse
-import ConfigParser
+import configparser
 import os
 import re
 import subprocess
@@ -59,10 +59,28 @@ class ClearTextBackend(BaseBackend):
 
 class GPGBackend(ClearTextBackend):
 
+    import gnupg
+    gpg = gnupg.GPG(use_agent=True)
+
     def __init__(self, root_folder, config):
         super(GPGBackend, self).__init__(root_folder, config)
 
-        print(repr(config.get('gpg', 'keys')))
+        self.key_names = set(config.get('gpg', 'keys').split('\n'))
+        self.keys = list()
+        for key in self.gpg.list_keys():
+            for uid in key.get('uids', []):
+                if uid in self.key_names:
+                    self.keys.append(key)
+                    continue
+
+    def encrypt(self, data):
+        if len(self.keys) != len(self.key_names):
+            raise ValueError('Missing keys in keychain')
+        keys = [k['keyid'] for k in self.keys]
+        encrypted_data = self.gpg.encrypt(keys, data)
+
+    def decrypt(self, data):
+        decrypted_data = self.gpg.decrypt(data)
 
 
 ### Matchers ##################################################################
@@ -82,11 +100,7 @@ class RegexpMatcher(BaseMatcher):
 
 ### Globals ###################################################################
 
-BACKENDS = set()
 CONFIG_FILE_NAME = "storage.conf"
-COMMANDS = [
-    'create'
-]
 
 ### Helpers ###################################################################
 
@@ -131,10 +145,10 @@ def backends():
         if CONFIG_FILE_NAME in files:
             del subdirs[:]
 
-            print path, "is a backend"
+            print(path, "is a backend")
 
             config_file = os.path.join(path, CONFIG_FILE_NAME)
-            config = ConfigParser.SafeConfigParser()
+            config = configparser.SafeConfigParser()
             config.read(config_file)
 
             backend_type = config.get('backend', 'type')
@@ -168,23 +182,31 @@ def parse_commandline():
     ###### Create ############################################################
     create_parser = subparsers.add_parser(
             'create', help='create a new entry',
-            description='create a new entry for the given <key>')
+            description='''Create a new entry for the given <key> in an existing
+                           backend''')
     create_parser.add_argument('key', metavar='<key>', help="key for the new entry")
 
     ###### Get ###############################################################
     get_parser = subparsers.add_parser(
-            'get', help='get password (first line) from an entry',
-            description='get the password (first line) from an entry described by <pattern>',
+            'get', aliases=['g'], help='get password (first line) from an entry',
+            description='Get the password (first line) from an entry described by <pattern>',
             parents=[match_parser])
     get_parser.add_argument('pattern', metavar='<pattern>', help="pattern for the wanted entry")
 
     ###### Show ##############################################################
     show_parser = subparsers.add_parser(
-            'show', help='show an entry',
+            'show', aliases=['sh'], help='show an entry',
             description='show the entry described by <pattern>',
             parents=[match_parser])
     show_parser.add_argument('pattern', metavar='<pattern>', help="pattern for the wanted entry")
 
+    ###### List ##############################################################
+    list_parser = subparsers.add_parser(
+            'list', aliases=['ls'], help='list keys',
+            description='show keys matching <pattern> (or all)',
+            parents=[match_parser])
+    list_parser.add_argument('pattern', metavar='<pattern>', help='patthern',
+            nargs='?')
     ###### Help ##############################################################
     help_parser = subparsers.add_parser('help', help='show help')
     help_parser.add_argument('help_command', metavar='command', nargs='?')
@@ -210,3 +232,5 @@ def create():
 if '__main__' == __name__:
     args = parse_commandline()
 
+    if 'list' == args.command:
+        backends()
