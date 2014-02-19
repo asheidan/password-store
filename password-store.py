@@ -3,104 +3,16 @@
 
 import argparse
 import configparser
+import logging
 import os
-import re
 import subprocess
 import sys
 
-### Backends ##################################################################
-
-class BaseBackend(object):
-
-    def __init__(self, root_folder, config):
-        self.root = root_folder
-        self.config = config
-
-
-class ClearTextBackend(BaseBackend):
-
-    ignore_chars = "\t\r\n"
-
-    def __init__(self, root_folder, config):
-        super(ClearTextBackend, self).__init__(root_folder, config)
-
-    def list(self):
-        """ Returns an iterator for all the keys for this storage """
-        walker = os.walk(self.root, followlinks=True)
-        for path, subs, files in walker:
-            for file in files:
-                yield os.path.join(path, file)
-
-    def get_password(self, key):
-        """ Returns the password (first line) for the given key """
-        password = None
-        with open(key, 'r') as file:
-            password = file.readline().rstrip(self.ignore_chars)
-        
-        return password
-
-    def get_entry(self, key):
-        """ Returns the entry for the given key """
-        with open(key, 'r') as file:
-            return file.read()
-
-    def create(self, key):
-        content = sys.stdin.read()
-        with open(os.path.join(self.root, key)) as file:
-            file.write(content)
-
-    def display(self, matcher=None, subdir=None):
-        keys = []
-        for key in self.list():
-            if matcher and matcher.matches(key):
-                keys.append(key)
-        display_keys(keys)
-
-
-class GPGBackend(ClearTextBackend):
-
-    import gnupg
-    gpg = gnupg.GPG(use_agent=True)
-
-    def __init__(self, root_folder, config):
-        super(GPGBackend, self).__init__(root_folder, config)
-
-        self.key_names = set(config.get('gpg', 'keys').split('\n'))
-        self.keys = list()
-        for key in self.gpg.list_keys():
-            for uid in key.get('uids', []):
-                if uid in self.key_names:
-                    self.keys.append(key)
-                    continue
-
-    def encrypt(self, data):
-        if len(self.keys) != len(self.key_names):
-            raise ValueError('Missing keys in keychain')
-        keys = [k['keyid'] for k in self.keys]
-        encrypted_data = self.gpg.encrypt(keys, data)
-
-    def decrypt(self, data):
-        decrypted_data = self.gpg.decrypt(data)
-
-
-### Matchers ##################################################################
-
-class BaseMatcher(object):
-    pass
-
-
-class RegexpMatcher(BaseMatcher):
-
-    def __init__(self, reg_string, flags=re.IGNORECASE):
-        self.regexp = re.compile(reg_string, flags=flags)
-
-    def matches(self, string):
-        return self.regexp.search(string)
-
+from backends import get_backends
+from display import display
+from matchers import get_matcher
 
 ### Globals ###################################################################
-
-CONFIG_FILE_NAME = "storage.conf"
 
 ### Helpers ###################################################################
 
@@ -136,36 +48,78 @@ def display_keys(key_list):
             print("%s%s:" % (padding(len(parents)), parts[i]))
             parents.append(parts[i])
 
-def backends():
-    backends = []
 
-    walker = os.walk('storage', followlinks=True)
+def parse_configfile(file_name=None):
+    """ Parse configuration file and return config
+    """
+    log = logging.getLogger('parse_configfile')
+    defaults = {
+        'Global': {
+            'directory': '~/.pwstore',
+        },
+        'Cleartext Backend': {},
+        'GPG Backend': {
+            'private key': '',
+        },
+    }
+    parser = configparser.SafeConfigParser(default_section='Global')
 
-    for path, subdirs, files in walker:
-        if CONFIG_FILE_NAME in files:
-            del subdirs[:]
+    parser.read_dict(defaults)
 
-            print(path, "is a backend")
+    if file_name is not None:
+        try:
+            log.info("Reading config file")
+            log.debug("Reading %s", file_name)
+            with open(file_name, 'r') as config_file:
+                parser.readfp(config_file)
 
-            config_file = os.path.join(path, CONFIG_FILE_NAME)
-            config = configparser.SafeConfigParser()
-            config.read(config_file)
+        except configparser.MissingSectionHeaderError as error:
+            log.error(error)
+            sys.exit(2)
 
-            backend_type = config.get('backend', 'type')
-            if backend_type == 'cleartext':
-                backends.append(ClearTextBackend(path, config))
-            elif backend_type == 'gpg':
-                backends.append(GPGBackend(path, config))
+        except FileNotFoundError:
+            log.warning("Configuration file does not exist")
+            try:
+                log.info("Creating file with default values")
+                with open(file_name, 'w') as config_file:
+                    parser.write(config_file)
+            except FileNotFoundError:
+                log.error("Could not create file")
 
-    return backends
+                sys.exit(1)
+
+    return parser
 
 
 def parse_commandline():
+    """ Parse arguments and return configuration
+    """
+    log = logging.getLogger('parse_commandline')
+
+    conf_parser = argparse.ArgumentParser(add_help=False)
+    conf_parser.add_argument('-c', '--config',
+                             default='~/.pwstore/configuration')
+    log.debug("Parsing configuration file from args")
+    args, remaining_args = conf_parser.parse_known_args()
+    args.config = os.path.expanduser(args.config)
+    log.debug("Configfile is %s", args.config)
+
+    configuration = parse_configfile(args.config)
+    #print(configuration.sections())
+
     parser = argparse.ArgumentParser(description='Stores information in files.')
     #parser.add_argument('command', metavar='<command>', choices=COMMANDS,
     #                    help="""""")
     #parser.add_argument('args', metavar='<arg>', nargs='*',
     #                    help="""""")
+    parser.add_argument('-c', '--config',
+                        default='~/.pwstore/configuration',
+                        help='which configurationfile to use')
+
+    parser.add_argument('-d', '--directory',
+                        default=configuration['Global']['directory'],
+                        help=('directory with storage backends (if different '
+                              'from default or configuration)'))
 
     ### Matchers #############################################################
     match_parser = argparse.ArgumentParser(add_help=False)
@@ -173,7 +127,7 @@ def parse_commandline():
     matchers.add_argument('-r', '--regexp', help='use regular expression matcher',
                         action='store_true', default=True)
     matchers.add_argument('-t', '--token', help='use token expression matcher',
-                        action='store_true', default=True)
+                        action='store_true', default=False)
 
     ### Subparsers ###########################################################
     subparsers = parser.add_subparsers(dest='command',
@@ -205,7 +159,7 @@ def parse_commandline():
             'list', aliases=['ls'], help='list keys',
             description='show keys matching <pattern> (or all)',
             parents=[match_parser])
-    list_parser.add_argument('pattern', metavar='<pattern>', help='patthern',
+    list_parser.add_argument('pattern', metavar='<pattern>', help='pattern',
             nargs='?')
     ###### Help ##############################################################
     help_parser = subparsers.add_parser('help', help='show help')
@@ -220,6 +174,8 @@ def parse_commandline():
         else:
             subparsers.choices.get(args.help_command, parser).print_help()
 
+        sys.exit(0)
+
     return args
 
 
@@ -230,7 +186,25 @@ def create():
 ###############################################################################
 
 if '__main__' == __name__:
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    
+    console = logging.StreamHandler()
+    console.setLevel(logging.DEBUG)
+    console.setFormatter(formatter)
+
+    logger.addHandler(console)
+
     args = parse_commandline()
 
-    if 'list' == args.command:
-        backends()
+    if args.command in ['ls', 'list']:
+        backends = get_backends(args.directory)
+        logger.debug("backends: %s", backends)
+        matcher = get_matcher(args, args.pattern)
+        logger.debug("pattern: %s", args.pattern)
+        for backend in backends:
+            for key in backend.list():
+                if matcher.matches(key):
+                    print(key)
