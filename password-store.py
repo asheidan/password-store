@@ -34,7 +34,11 @@ color = Colorizer()
 
 ### Helpers ###################################################################
 
-def set_clipboard(text, primary=True, secondary=True, clipboard=True):
+def set_pbcopy_clipboard(text):
+    pbcopy_proc = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
+    pbcopy_proc.communicate(text)
+
+def set_xsel_clipboard(text, primary=True, secondary=True, clipboard=True):
     if primary:
         xsel_proc = subprocess.Popen(['xsel', '-pi'], stdin=subprocess.PIPE)
         xsel_proc.communicate(text)
