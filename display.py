@@ -1,3 +1,26 @@
+import os
+from collections import defaultdict
+
+
+class Colorizer(object):
+
+    red = 91
+    green = 92
+    yellow = 93
+    blue = 94
+
+    def color(self, code=0):
+        return "\033[%dm" % code
+
+    def colorize(self, string, color_code):
+        return self.color(color_code) + string + self.color()
+
+    def directory(self, string):
+        return self.colorize(string, self.blue)
+
+color = Colorizer()
+
+
 def padding(lvl):
     if lvl == 0:
         return ''
@@ -23,6 +46,7 @@ def pad_sub(line, last=False):
     else:
         return "    " + line
 
+
 def pad_this(line, last=False):
     if not last:
         return "\u251C\u2500\u2500 " + line
@@ -30,7 +54,22 @@ def pad_this(line, last=False):
         return "\u2514\u2500\u2500 " + line
 
 
-def display_directory(directory, matcher=None):
+def tree_from_list(keys):
+    treenode = None
+    treenode = lambda: defaultdict(treenode)
+
+    tree = treenode()
+
+    for key in keys:
+        node = tree
+        for part in key.split(os.sep):
+            print(part)
+            node = node[part]
+
+    return tree
+
+
+def display_directory(keys):
     rows = []
     walker = os.walk(directory, followlinks=True)
     path, subs, files = next(walker)
@@ -53,13 +92,11 @@ def display_directory(directory, matcher=None):
     return rows
 
 
-def display(directory, matcher=None):
+def display(keys):
     import locale
     locale.setlocale(locale.LC_ALL, '')
     code = locale.getpreferredencoding()
 
     #print(code)
 
-    print(directory)
-    print("\n".join(display_directory(directory, matcher)))
-
+    print("\n".join(sorted(keys)))
