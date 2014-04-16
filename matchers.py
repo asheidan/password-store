@@ -1,5 +1,8 @@
 # -*- coding: UTF-8
 import re
+import logging
+
+log = logging.getLogger(__name__)
 
 ### Matchers ##################################################################
 
@@ -10,6 +13,7 @@ class BaseMatcher(object):
 class RegexpMatcher(BaseMatcher):
 
     def __init__(self, reg_string, flags=re.IGNORECASE):
+        log.debug((reg_string, flags))
         self.regexp = re.compile(reg_string, flags=flags)
 
     def matches(self, string):
