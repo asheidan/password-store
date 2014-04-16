@@ -30,7 +30,8 @@ class ClearTextBackend(BaseBackend):
         walker = os.walk(self.root, followlinks=True)
         for path, subs, files in walker:
             for file in files:
-                if not file.startswith(CONFIG_FILE_NAME):
+                if (not file.startswith('.') and
+                        not file.startswith(CONFIG_FILE_NAME)):
                     yield os.path.join(path, file)
 
     def get_password(self, key):
@@ -105,11 +106,16 @@ def get_backends(directory):
             config = configparser.SafeConfigParser()
             config.read(config_file)
 
-            backend_type = config.get('backend', 'type')
-            if backend_type == 'cleartext':
-                backends.append(ClearTextBackend(path, config))
-            elif backend_type == 'gpg':
-                backends.append(GPGBackend(path, config))
+            try:
+                backend_type = config.get('backend', 'type')
+                if backend_type == 'cleartext':
+                    backends.append(ClearTextBackend(path, config))
+                elif backend_type == 'gpg':
+                    backends.append(GPGBackend(path, config))
+            except configparser.NoSectionError:
+                log.error('No backend section in configuration %s', config_file)
+            except configparser.NoOptionError as error:
+                log.error(error)
 
     return backends
 

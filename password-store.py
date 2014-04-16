@@ -143,7 +143,7 @@ def parse_commandline():
             description='show keys matching <pattern> (or all)',
             parents=[match_parser])
     list_parser.add_argument('pattern', metavar='<pattern>', help='pattern',
-            nargs='?')
+            nargs='?', default='')
     ###### Help ##############################################################
     help_parser = subparsers.add_parser('help', help='show help')
     help_parser.add_argument('help_command', metavar='command', nargs='?')
@@ -185,7 +185,5 @@ if '__main__' == __name__:
         logger.debug("backends: %s", backends)
         matcher = get_matcher(args, args.pattern)
         logger.debug("pattern: %s", args.pattern)
-        for backend in backends:
-            for key in backend.list():
-                if matcher.matches(key):
-                    print(key)
+        keys = [k for b in backends for k in b.list() if matcher.matches(k)]
+        display(keys)
