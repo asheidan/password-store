@@ -4,10 +4,10 @@ from collections import defaultdict
 
 class Colorizer(object):
 
-    red = 91
-    green = 92
-    yellow = 93
-    blue = 94
+    RED = 91
+    GREEN = 92
+    YELLOW = 93
+    BLUE = 94
 
     def color(self, code=0):
         return "\033[%dm" % code
@@ -16,42 +16,10 @@ class Colorizer(object):
         return self.color(color_code) + string + self.color()
 
     def directory(self, string):
-        return self.colorize(string, self.blue)
+        return self.colorize(string, self.BLUE)
 
-color = Colorizer()
-
-
-def padding(lvl):
-    if lvl == 0:
-        return ''
-    else:
-        return "   " * lvl
-
-
-def display_keys(key_list):
-    keys = sorted(key_list)
-    parents = []
-    for key in keys:
-        parts = key.split('/')
-        while parents != parts[:len(parents)]:
-            parents.pop()
-        for i in xrange(len(parents),len(parts)):
-            print("%s%s:" % (padding(len(parents)), parts[i]))
-            parents.append(parts[i])
-
-
-def pad_sub(line, last=False):
-    if not last:
-        return "\u2502   " + line
-    else:
-        return "    " + line
-
-
-def pad_this(line, last=False):
-    if not last:
-        return "\u251C\u2500\u2500 " + line
-    else:
-        return "\u2514\u2500\u2500 " + line
+    def storage(self, string):
+        return self.colorize(string, self.RED)
 
 
 def tree_from_list(keys):
@@ -69,34 +37,93 @@ def tree_from_list(keys):
     return tree
 
 
-def display_directory(keys):
-    rows = []
-    walker = os.walk(directory, followlinks=True)
-    path, subs, files = next(walker)
-    if CONFIG_FILE_NAME in files:
-        files.remove(CONFIG_FILE_NAME)
-        #rows.append("\u2502 Backend")
-
-    for i, subdir in enumerate(sorted(subs)):
-        is_last = len(files) == 0 and i >= len(subs) - 1
-        walk_root = os.path.join(directory, subdir)
-        rows.append(pad_this(color.directory(subdir), is_last))
-        subdir_data = display_directory(walk_root, matcher)
-        for data_line in subdir_data:
-            rows.append(pad_sub(data_line, is_last))
-
-    for i, file in enumerate(sorted(files)):
-        is_last = i >= len(files) - 1
-        rows.append(pad_this(file, is_last))
-
-    return rows
-
-
 def display(keys):
     import locale
     locale.setlocale(locale.LC_ALL, '')
-    code = locale.getpreferredencoding()
+    # code = locale.getpreferredencoding()
 
-    #print(code)
+    # print(code)
 
     print("\n".join(sorted(keys)))
+
+
+class Output:
+    B = 'B'
+    S = 'S'
+    K = 'K'
+
+    empty_pad = "    "
+    line_pad = "\u2502   "
+    tree_node = "\u251C\u2500\u2500 "
+    tree_end = "\u2514\u2500\u2500 "
+
+    def __init__(self, colorizer=Colorizer()):
+        self.level = 0
+        self.stack = []
+        self.tree = []
+        self.current_node = self.tree
+
+        self.color = colorizer
+
+    def pad(self, line):
+        print(self.line_pad * self.level + line)
+
+    def start_backend(self, name):
+        tmp = []
+        self.current_node.append((name, self.B, tmp))
+        self.stack.append(self.current_node)
+        self.current_node = tmp
+
+    def end_backend(self):
+        # self.level -= 1
+        while len(self.stack) > 0:
+            self.current_node = self.stack.pop()
+
+    def start_sub(self, name):
+        tmp = []
+        self.current_node.append((name, self.S, tmp))
+        self.stack.append(self.current_node)
+        self.current_node = tmp
+
+    def end_sub(self):
+        self.current_node = self.stack.pop()
+
+    def key(self, key):
+        self.current_node.append((key, self.K, None))
+
+    def pprint(self):
+        from pprint import pprint
+        pprint(self.tree)
+
+    def format_node(self, node, pad_string="", is_last=False):
+        result = []
+        name, type, sub_nodes = node
+        # print(sub_nodes)
+
+        if is_last:
+            sub_pad = self.empty_pad
+            this_pad = self.tree_end
+        else:
+            sub_pad = self.line_pad
+            this_pad = self.tree_node
+
+        if (type == self.B):
+            result.append(pad_string + self.color.storage(name))
+            sub_pad = ""
+        elif (type == self.S):
+            result.append(pad_string + this_pad + self.color.directory(name))
+        elif (type == self.K):
+            result.append(pad_string + this_pad + name)
+
+        if type != self.K and sub_nodes is not None:
+            if len(sub_nodes) > 0:
+                for n in sub_nodes[:-1]:
+                    result.extend(self.format_node(n, pad_string + sub_pad))
+                n = sub_nodes[-1]
+                result.extend(self.format_node(n, pad_string + sub_pad, True))
+
+        return result
+
+    def pretty_print(self):
+        for node in self.tree:
+            print("\n".join(self.format_node(node)))

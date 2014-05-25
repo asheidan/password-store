@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 from backends import get_backends
-from display import display
+from display import Output
 from matchers import get_matcher
 
 ### Globals ###################################################################
@@ -171,7 +171,7 @@ if '__main__' == __name__:
     logger.setLevel(logging.DEBUG)
 
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
+
     console = logging.StreamHandler()
     console.setLevel(logging.DEBUG)
     console.setFormatter(formatter)
@@ -179,11 +179,15 @@ if '__main__' == __name__:
     logger.addHandler(console)
 
     args = parse_commandline()
+    output = Output()
 
     if args.command in ['ls', 'list']:
         backends = get_backends(args.directory)
         logger.debug("backends: %s", backends)
         matcher = get_matcher(args, args.pattern)
         logger.debug("pattern: %s", args.pattern)
-        keys = [k for b in backends for k in b.list() if matcher.matches(k)]
-        display(keys)
+        for backend in backends:
+            backend.filter(output, matcher)
+
+    output.pprint()
+    output.pretty_print()

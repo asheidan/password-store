@@ -1,8 +1,10 @@
 # -*- coding: UTF-8
 
 import configparser
+import contextlib
 import logging
 import os
+import sys
 
 CONFIG_FILE_NAME = "storage.conf"
 
@@ -17,6 +19,12 @@ class BaseBackend(object):
     def list(self):
         return []
 
+    def __unicode__(self):
+        return self.root
+
+    def __str__(self):
+        str(unicode(self))
+
 
 class ClearTextBackend(BaseBackend):
 
@@ -24,6 +32,7 @@ class ClearTextBackend(BaseBackend):
 
     def __init__(self, root_folder, config):
         super(ClearTextBackend, self).__init__(root_folder, config)
+        self.log = logging.getLogger('backends.ClearText')
 
     def list(self):
         """ Returns an iterator for all the keys for this storage """
@@ -34,30 +43,59 @@ class ClearTextBackend(BaseBackend):
                         not file.startswith(CONFIG_FILE_NAME)):
                     yield os.path.join(path, file)
 
+    def filter(self, output, matcher=None):
+        walker = os.walk(self.root, followlinks=True)
+        common_path = self.root.split(os.sep)
+        output.start_backend(self.root)
+        for path, subs, files in walker:
+            current_path = path.split(os.sep)
+            #print(current_path, common_path)
+            old_dirs = common_path.copy()
+            new_dirs = current_path.copy()
+            while (len(old_dirs) and len(new_dirs) and
+                    old_dirs[0] == new_dirs[0]):
+                old_dirs.pop(0)
+                new_dirs.pop(0)
+
+            for _ in old_dirs:
+                output.end_sub()
+            for name in new_dirs:
+                output.start_sub(name)
+
+            common_path = current_path
+
+            #print("-%s +%s" % (old_dirs, new_dirs))
+
+            for file in files:
+                if (not file.startswith('.') and
+                        not file.startswith(CONFIG_FILE_NAME)):
+                    key = os.path.join(path, file)
+                    if matcher is None or matcher.matches(key):
+                        output.key(file)
+        output.end_backend()
+
+    @contextlib.contextmanager
+    def storage_for_key(self, key, mode="r"):
+        with open(key, mode) as storage_file:
+            yield storage_file
+
     def get_password(self, key):
         """ Returns the password (first line) for the given key """
         password = None
-        with open(key, 'r') as file:
-            password = file.readline().rstrip(self.ignore_chars)
-        
+        with self.storage_for_key(key) as storage:
+            password = storage.readline().rstrip(self.ignore_chars)
+
         return password
 
     def get_entry(self, key):
         """ Returns the entry for the given key """
-        with open(key, 'r') as file:
-            return file.read()
+        with self.storage_for_key(key) as storage:
+            return storage.read()
 
     def create(self, key):
         content = sys.stdin.read()
         with open(os.path.join(self.root, key)) as file:
             file.write(content)
-
-    def display(self, matcher=None, subdir=None):
-        keys = []
-        for key in self.list():
-            if matcher and matcher.matches(key):
-                keys.append(key)
-        display_keys(keys)
 
 
 class GPGBackend(ClearTextBackend):
