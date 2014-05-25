@@ -42,16 +42,51 @@ def display(keys):
     locale.setlocale(locale.LC_ALL, '')
     # code = locale.getpreferredencoding()
 
-    # print(code)
-
     print("\n".join(sorted(keys)))
 
 
-class Output:
-    B = 'B'
-    S = 'S'
-    K = 'K'
+class Node:
+    alias = 'N'
 
+    def __init__(self, name):
+        self.name = name
+        self.sub_tree = []
+
+    def __iter__(self):
+        return iter(self.sub_tree)
+
+    def __len__(self):
+        return len(self.sub_tree)
+
+    def __getitem__(self, key):
+        return self.sub_tree[key]
+
+    def __delitem__(self, key):
+        del self.sub_tree[key]
+
+    def append(self, node):
+        return self.sub_tree.append(node)
+
+    def remove(self, value):
+        return self.sub_tree.remove(value)
+
+    def __repr__(self):
+        return str((self.alias, self.name, self.sub_tree))
+
+
+class Backend(Node):
+    alias = 'B'
+
+
+class Directory(Node):
+    alias = 'D'
+
+
+class Key(Node):
+    alias = 'K'
+
+
+class Output:
     empty_pad = "    "
     line_pad = "\u2502   "
     tree_node = "\u251C\u2500\u2500 "
@@ -60,7 +95,7 @@ class Output:
     def __init__(self, colorizer=Colorizer()):
         self.level = 0
         self.stack = []
-        self.tree = []
+        self.tree = Node('root')
         self.current_node = self.tree
 
         self.color = colorizer
@@ -69,27 +104,35 @@ class Output:
         print(self.line_pad * self.level + line)
 
     def start_backend(self, name):
-        tmp = []
-        self.current_node.append((name, self.B, tmp))
+        node = Backend(name)
+        self.current_node.append(node)
         self.stack.append(self.current_node)
-        self.current_node = tmp
+        self.current_node = node
 
     def end_backend(self):
         # self.level -= 1
+        previous_node = self.stack.pop()
+        if len(self.current_node) == 0:
+            previous_node.remove(self.current_node)
+        self.current_node = previous_node
+
         while len(self.stack) > 0:
             self.current_node = self.stack.pop()
 
     def start_sub(self, name):
-        tmp = []
-        self.current_node.append((name, self.S, tmp))
+        node = Directory(name)
+        self.current_node.append(node)
         self.stack.append(self.current_node)
-        self.current_node = tmp
+        self.current_node = node
 
     def end_sub(self):
-        self.current_node = self.stack.pop()
+        previous_node = self.stack.pop()
+        if len(self.current_node) == 0:
+            previous_node.remove(self.current_node)
+        self.current_node = previous_node
 
     def key(self, key):
-        self.current_node.append((key, self.K, None))
+        self.current_node.append(Key(key))
 
     def pprint(self):
         from pprint import pprint
@@ -97,8 +140,6 @@ class Output:
 
     def format_node(self, node, pad_string="", is_last=False):
         result = []
-        name, type, sub_nodes = node
-        # print(sub_nodes)
 
         if is_last:
             sub_pad = self.empty_pad
@@ -107,19 +148,20 @@ class Output:
             sub_pad = self.line_pad
             this_pad = self.tree_node
 
-        if (type == self.B):
-            result.append(pad_string + self.color.storage(name))
+        if type(node) == Backend:
+            result.insert(0, pad_string + self.color.storage(node.name))
             sub_pad = ""
-        elif (type == self.S):
-            result.append(pad_string + this_pad + self.color.directory(name))
-        elif (type == self.K):
-            result.append(pad_string + this_pad + name)
+        elif type(node) == Directory:
+            result.insert(
+                0, pad_string + this_pad + self.color.directory(node.name))
+        elif type(node) == Key:
+            result.insert(0, pad_string + this_pad + node.name)
 
-        if type != self.K and sub_nodes is not None:
-            if len(sub_nodes) > 0:
-                for n in sub_nodes[:-1]:
+        if type(node) != Key:
+            if len(node) > 0:
+                for n in node[:-1]:
                     result.extend(self.format_node(n, pad_string + sub_pad))
-                n = sub_nodes[-1]
+                n = node[-1]
                 result.extend(self.format_node(n, pad_string + sub_pad, True))
 
         return result
