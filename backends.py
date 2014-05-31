@@ -66,8 +66,6 @@ class ClearTextBackend(BaseBackend):
 
             common_path = current_path
 
-            #print("-%s +%s" % (old_dirs, new_dirs))
-
             for file in files:
                 if (not file.startswith('.') and
                         not file.startswith(CONFIG_FILE_NAME)):
@@ -79,6 +77,16 @@ class ClearTextBackend(BaseBackend):
         for _ in range(0, len(common_path) - len(root_list)):
             output.end_sub()
         output.end_backend()
+
+    def _matching_keys(self, matcher):
+        walker = os.walk(self.root, followlinks=True)
+        for path, subs, files in walker:
+            for filename in files:
+                if (not filename.startswith('.') and
+                        not filename.startswith(CONFIG_FILE_NAME)):
+                    key = os.path.join(path, filename)
+                    if matcher is None or matcher.matches(key):
+                        yield(key)
 
     @contextlib.contextmanager
     def storage_for_key(self, key, mode="r"):
