@@ -74,6 +74,10 @@ class ClearTextBackend(BaseBackend):
                     key = os.path.join(path, file)
                     if matcher is None or matcher.matches(key):
                         output.key(file)
+
+        root_list = self.root.split(os.sep)
+        for _ in range(0, len(common_path) - len(root_list)):
+            output.end_sub()
         output.end_backend()
 
     @contextlib.contextmanager
@@ -158,5 +162,3 @@ def get_backends(directory):
                 log.error(error)
 
     return backends
-
-
