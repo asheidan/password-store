@@ -93,18 +93,20 @@ class ClearTextBackend(BaseBackend):
         with open(key, mode) as storage_file:
             yield storage_file
 
-    def get_password(self, key):
+    def get_password(self, matcher):
         """ Returns the password (first line) for the given key """
         password = None
-        with self.storage_for_key(key) as storage:
-            password = storage.readline().rstrip(self.ignore_chars)
+        for key in self._matching_keys(matcher):
+            with self.storage_for_key(key) as storage:
+                password = storage.readline().rstrip(self.ignore_chars)
 
-        return password
+            return password
 
-    def get_entry(self, key):
+    def get_entry(self, matcher):
         """ Returns the entry for the given key """
-        with self.storage_for_key(key) as storage:
-            return storage.read()
+        for key in self._matching_keys(matcher):
+            with self.storage_for_key(key) as storage:
+                return storage.read()
 
     def create(self, key):
         content = sys.stdin.read()
