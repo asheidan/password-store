@@ -189,5 +189,26 @@ if '__main__' == __name__:
         for backend in backends:
             backend.filter(output, matcher)
 
-    output.pprint()
-    output.pretty_print()
+        output.pretty_print()
+
+    elif args.command in ['g', 'get']:
+        """ - (set clipboard)
+        """
+        backends = get_backends(args.directory)
+        logger.debug("backends: %s", backends)
+        matcher = get_matcher(args, args.pattern)
+        logger.debug("pattern: %s", args.pattern)
+        for backend in backends:
+            password = backend.get_password(matcher)
+            if password is not None:
+                print(password)
+                break
+
+    elif args.command in ['sh', 'show']:
+        backends = get_backends(args.directory)
+        matcher = get_matcher(args, args.pattern)
+        for backend in backends:
+            password = backend.get_entry(matcher)
+            if password is not None:
+                print(password)
+                break
