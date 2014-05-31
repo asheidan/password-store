@@ -1,6 +1,10 @@
 import os
 from collections import defaultdict
 
+import logging
+
+log = logging.getLogger(__name__)
+
 
 class Colorizer(object):
 

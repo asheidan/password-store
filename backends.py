@@ -6,6 +6,8 @@ import logging
 import os
 import sys
 
+log = logging.getLogger(__name__)
+
 CONFIG_FILE_NAME = "storage.conf"
 
 ### Backends ##################################################################
