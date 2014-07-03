@@ -66,12 +66,12 @@ class ClearTextBackend(BaseBackend):
 
             common_path = current_path
 
-            for file in files:
-                if (not file.startswith('.') and
-                        not file.startswith(CONFIG_FILE_NAME)):
-                    key = os.path.join(path, file)
+            for filename in files:
+                if (not filename.startswith('.') and
+                        not filename.startswith(CONFIG_FILE_NAME)):
+                    key = os.path.join(path, filename)
                     if matcher is None or matcher.matches(key):
-                        output.key(file)
+                        output.key(filename)
 
         root_list = self.root.split(os.sep)
         for _ in range(0, len(common_path) - len(root_list)):
