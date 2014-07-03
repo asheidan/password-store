@@ -11,7 +11,8 @@ log = logging.getLogger(__name__)
 
 CONFIG_FILE_NAME = "storage.conf"
 
-### Backends ##################################################################
+# Backends ####################################################################
+
 
 class BaseBackend(object):
 
@@ -52,7 +53,7 @@ class ClearTextBackend(BaseBackend):
         output.start_backend(self.root)
         for path, subs, files in walker:
             current_path = path.split(os.sep)
-            #print(current_path, common_path)
+            # print(current_path, common_path)
             old_dirs = common_path.copy()
             new_dirs = current_path.copy()
             while (len(old_dirs) and len(new_dirs) and
@@ -147,7 +148,7 @@ class GPGBackend(ClearTextBackend):
         decrypted_data = self.gpg.decrypt(data)
 
 
-### Helpers ###################################################################
+# Helpers #####################################################################
 
 def get_backends(directory):
     log = logging.getLogger('backends.get_backends')
@@ -174,7 +175,8 @@ def get_backends(directory):
                 elif backend_type == 'gpg':
                     backends.append(GPGBackend(path, config))
             except configparser.NoSectionError:
-                log.error('No backend section in configuration %s', config_file)
+                log.error('No backend section in configuration %s',
+                          config_file)
             except configparser.NoOptionError as error:
                 log.error(error)
 

@@ -12,13 +12,17 @@ from backends import get_backends
 from display import Output
 from matchers import get_matcher
 
-### Globals ###################################################################
+log = logging.getLogger(__name__)
 
-### Helpers ###################################################################
+# Globals #####################################################################
+
+# Helpers #####################################################################
+
 
 def set_pbcopy_clipboard(text):
     pbcopy_proc = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
     pbcopy_proc.communicate(text)
+
 
 def set_xsel_clipboard(text, primary=True, secondary=True, clipboard=True):
     if primary:
@@ -104,15 +108,15 @@ def parse_commandline():
                         help=('directory with storage backends (if different '
                               'from default or configuration)'))
 
-    ### Matchers #############################################################
+    # Matchers ###############################################################
     match_parser = argparse.ArgumentParser(add_help=False)
     matchers = match_parser.add_mutually_exclusive_group()
     matchers.add_argument('-r', '--regexp', help='use regular expression matcher',
-                        action='store_true', default=True)
+                          action='store_true', default=True)
     matchers.add_argument('-t', '--token', help='use token expression matcher',
-                        action='store_true', default=False)
+                          action='store_true', default=False)
 
-    ### Subparsers ###########################################################
+    # Subparsers #############################################################
     subparsers = parser.add_subparsers(dest='command',
             title='subcommands', description='valid subcommands')
 
@@ -143,7 +147,7 @@ def parse_commandline():
             description='show keys matching <pattern> (or all)',
             parents=[match_parser])
     list_parser.add_argument('pattern', metavar='<pattern>', help='pattern',
-            nargs='?', default='')
+                             nargs='?', default='')
     ###### Help ##############################################################
     help_parser = subparsers.add_parser('help', help='show help')
     help_parser.add_argument('help_command', metavar='command', nargs='?')
@@ -170,7 +174,8 @@ if '__main__' == __name__:
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(name)s -'
+                                  ' %(levelname)s - %(message)s')
 
     console = logging.StreamHandler()
     console.setLevel(logging.DEBUG)
