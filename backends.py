@@ -2,6 +2,7 @@
 
 import configparser
 import contextlib
+from io import StringIO
 import logging
 import os
 import sys
@@ -129,6 +130,12 @@ class GPGBackend(ClearTextBackend):
                 if uid in self.key_names:
                     self.keys.append(key)
                     continue
+
+    @contextlib.contextmanager
+    def storage_for_key(self, key, mode="r"):
+        with super(GPGBackend, self).storage_for_key(key, mode) as storage:
+            decrypted_data = self.gpg.decrypt_file(storage)
+            yield StringIO(str(decrypted_data))
 
     def encrypt(self, data):
         if len(self.keys) != len(self.key_names):
