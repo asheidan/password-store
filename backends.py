@@ -17,8 +17,10 @@ CONFIG_FILE_NAME = "storage.conf"
 class BaseBackend(object):
 
     def __init__(self, root_folder, config):
-        self.root = root_folder
+        self.root = os.path.abspath(root_folder)
         self.config = config
+        self.name = os.path.basename(root_folder)
+        self.trivial_path = root_folder
 
     def list(self):
         return []
@@ -27,7 +29,7 @@ class BaseBackend(object):
         return self.root
 
     def __str__(self):
-        str(unicode(self))
+        return str(unicode(self))
 
 
 class ClearTextBackend(BaseBackend):
@@ -50,7 +52,7 @@ class ClearTextBackend(BaseBackend):
     def filter(self, output, matcher=None):
         walker = os.walk(self.root, followlinks=True)
         common_path = self.root.split(os.sep)
-        output.start_backend(self.root)
+        output.start_backend(self.name)
         for path, subs, files in walker:
             current_path = path.split(os.sep)
             # print(current_path, common_path)
@@ -82,17 +84,34 @@ class ClearTextBackend(BaseBackend):
 
     def _matching_keys(self, matcher):
         walker = os.walk(self.root, followlinks=True)
+        root_len = len(self.root)
         for path, subs, files in walker:
             for filename in files:
                 if (not filename.startswith('.') and
                         not filename.startswith(CONFIG_FILE_NAME)):
-                    key = os.path.join(path, filename)
+                    abs_path = os.path.join(path, filename)
+                    key = abs_path[root_len+1:]
                     if matcher is None or matcher.matches(key):
                         yield(key)
 
+    def path_for_key(self, key):
+        return os.path.join(self.root, key)
+
     @contextlib.contextmanager
     def storage_for_key(self, key, mode="r"):
-        with open(key, mode) as storage_file:
+        storage_path = self.path_for_key(key)
+        if mode != 'r':
+            directory = os.path.dirname(storage_path)
+            if os.path.exists(directory):
+                if not os.path.isdir(os.path.dirname(storage_path)):
+                    log.error("Cant't create directory, file already exists"
+                              "with the same name")
+                    raise Exception
+            else:
+                log.info("Creating directory: %s", directory)
+            os.makedirs(directory)
+        log.debug("Opening %s mode %s", storage_path, mode)
+        with open(storage_path, mode) as storage_file:
             yield storage_file
 
     def get_password(self, matcher):
@@ -112,47 +131,77 @@ class ClearTextBackend(BaseBackend):
 
     def create(self, key):
         content = sys.stdin.read()
-        with open(os.path.join(self.root, key)) as file:
-            file.write(content)
+        with self.storage_for_key(key, mode="x") as storage:
+            storage.write(content)
 
 
 class GPGBackend(ClearTextBackend):
 
-    import gnupg
-    gpg = gnupg.GPG(use_agent=True)
+    _gpg = None
+    gpg_binary = None
+
+    @property
+    def gpg(self):
+        if self._gpg is None:
+            import gnupg
+            self._gpg = gnupg.GPG(use_agent=True,
+                                  gpgbinary=self.gpg_binary)
+
+        return self._gpg
 
     def __init__(self, root_folder, config):
         super(GPGBackend, self).__init__(root_folder, config)
 
-        self.key_names = set(config.get('gpg', 'keys').split('\n'))
+        self.key_names = set(config.get('gpg', 'keys').strip().split('\n'))
         self.keys = list()
         for key in self.gpg.list_keys():
             for uid in key.get('uids', []):
                 if uid in self.key_names:
                     self.keys.append(key)
                     continue
+        log.debug("Keys for storage: %s", self.keys)
+        os.environ["PINENTRY_USER_DATA"] = "USE_CURSES=0"
 
     @contextlib.contextmanager
     def storage_for_key(self, key, mode="r"):
-        with super(GPGBackend, self).storage_for_key(key, mode) as storage:
-            decrypted_data = self.gpg.decrypt_file(storage)
-            yield StringIO(str(decrypted_data))
+        if mode != "r":
+            storage = StringIO()
+            yield storage
+
+            encrypted_data = self.encrypt(storage.getvalue())
+            with super(GPGBackend, self).storage_for_key(key, mode) as storage:
+                storage.write(str(encrypted_data))
+        else:
+            with super(GPGBackend, self).storage_for_key(key, mode) as storage:
+                log.debug("The storage: %s", storage)
+                decrypted_data = self.decrypt(storage.read())
+                yield StringIO(str(decrypted_data))
 
     def encrypt(self, data):
         if len(self.keys) != len(self.key_names):
+            print(self.key_names)
             raise ValueError('Missing keys in keychain')
         keys = [k['keyid'] for k in self.keys]
-        encrypted_data = self.gpg.encrypt(keys, data)
+        encrypted_data = self.gpg.encrypt(data, keys, always_trust=True)
+        return encrypted_data
 
     def decrypt(self, data):
         decrypted_data = self.gpg.decrypt(data)
+        return decrypted_data
 
 
 # Helpers #####################################################################
 
+_backends = None
+
+
 def get_backends(directory):
+    global _backends
+    if _backends is not None:
+        return _backends
+
     log = logging.getLogger('backends.get_backends')
-    backends = []
+    backends = {}
 
     directory = os.path.expanduser(directory)
     walker = os.walk(directory, followlinks=True)
@@ -171,13 +220,16 @@ def get_backends(directory):
             try:
                 backend_type = config.get('backend', 'type')
                 if backend_type == 'cleartext':
-                    backends.append(ClearTextBackend(path, config))
+                    backend = ClearTextBackend(path, config)
                 elif backend_type == 'gpg':
-                    backends.append(GPGBackend(path, config))
+                    backend = GPGBackend(path, config)
+
+                backends[backend.name] = backend
             except configparser.NoSectionError:
                 log.error('No backend section in configuration %s',
                           config_file)
             except configparser.NoOptionError as error:
                 log.error(error)
 
+    _backends = backends
     return backends

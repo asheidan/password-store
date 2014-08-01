@@ -57,7 +57,6 @@ def parse_configfile(file_name=None):
 
     if file_name is not None:
         try:
-            log.info("Reading config file")
             log.debug("Reading %s", file_name)
             with open(file_name, 'r') as config_file:
                 parser.readfp(config_file)
@@ -83,17 +82,6 @@ def parse_commandline():
     """
     log = logging.getLogger('parse_commandline')
 
-    conf_parser = argparse.ArgumentParser(add_help=False)
-    conf_parser.add_argument('-c', '--config',
-                             default='~/.pwstore/configuration')
-    log.debug("Parsing configuration file from args")
-    args, remaining_args = conf_parser.parse_known_args()
-    args.config = os.path.expanduser(args.config)
-    log.debug("Configfile is %s", args.config)
-
-    configuration = parse_configfile(args.config)
-    #print(configuration.sections())
-
     parser = argparse.ArgumentParser(description='Stores information in files.')
     #parser.add_argument('command', metavar='<command>', choices=COMMANDS,
     #                    help="""""")
@@ -104,7 +92,7 @@ def parse_commandline():
                         help='which configurationfile to use')
 
     parser.add_argument('-d', '--directory',
-                        default=configuration['Global']['directory'],
+                        default='~/.pwstore/storage',
                         help=('directory with storage backends (if different '
                               'from default or configuration)'))
 
@@ -125,6 +113,7 @@ def parse_commandline():
             'create', help='create a new entry',
             description='''Create a new entry for the given <key> in an existing
                            backend''')
+    create_parser.add_argument('storage', metavar='<storage>', help="storage")
     create_parser.add_argument('key', metavar='<key>', help="key for the new entry")
 
     ###### Get ###############################################################
@@ -184,14 +173,13 @@ if '__main__' == __name__:
     logger.addHandler(console)
 
     args = parse_commandline()
+
     output = Output()
 
     if args.command in ['ls', 'list']:
         backends = get_backends(args.directory)
-        logger.debug("backends: %s", backends)
         matcher = get_matcher(args, args.pattern)
-        logger.debug("pattern: %s", args.pattern)
-        for backend in backends:
+        for backend in backends.values():
             backend.filter(output, matcher)
 
         output.pretty_print()
@@ -200,10 +188,8 @@ if '__main__' == __name__:
         """ - (set clipboard)
         """
         backends = get_backends(args.directory)
-        logger.debug("backends: %s", backends)
         matcher = get_matcher(args, args.pattern)
-        logger.debug("pattern: %s", args.pattern)
-        for backend in backends:
+        for backend in backends.values():
             password = backend.get_password(matcher)
             if password is not None:
                 print(password)
@@ -212,8 +198,15 @@ if '__main__' == __name__:
     elif args.command in ['sh', 'show']:
         backends = get_backends(args.directory)
         matcher = get_matcher(args, args.pattern)
-        for backend in backends:
+        for backend in backends.values():
             password = backend.get_entry(matcher)
             if password is not None:
                 print(password)
                 break
+    elif args.command in ['create']:
+        backends = get_backends(args.directory)
+        backend = backends.get(args.storage, None)
+        if backend is None:
+            print("There is no such storage")
+
+        backend.create(args.key)
