@@ -109,7 +109,7 @@ class ClearTextBackend(BaseBackend):
                     raise Exception
             else:
                 log.info("Creating directory: %s", directory)
-            os.makedirs(directory)
+                os.makedirs(directory)
         log.debug("Opening %s mode %s", storage_path, mode)
         with open(storage_path, mode) as storage_file:
             yield storage_file

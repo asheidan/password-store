@@ -21,21 +21,32 @@ log = logging.getLogger(__name__)
 
 def set_pbcopy_clipboard(text):
     pbcopy_proc = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
-    pbcopy_proc.communicate(text)
+    pbcopy_proc.communicate(bytes(text, encoding="UTF-8"))
 
 
 def set_xsel_clipboard(text, primary=True, secondary=True, clipboard=True):
     if primary:
         xsel_proc = subprocess.Popen(['xsel', '-pi'], stdin=subprocess.PIPE)
-        xsel_proc.communicate(text)
+        xsel_proc.communicate(bytes(text, encoding="UTF-8"))
 
     if secondary:
         xsel_proc = subprocess.Popen(['xsel', '-si'], stdin=subprocess.PIPE)
-        xsel_proc.communicate(text)
+        xsel_proc.communicate(bytes(text, encoding="UTF-8"))
 
     if clipboard:
         xsel_proc = subprocess.Popen(['xsel', '-bi'], stdin=subprocess.PIPE)
-        xsel_proc.communicate(text)
+        xsel_proc.communicate(bytes(text, encoding="UTF-8"))
+
+
+def set_clipboard(text):
+    import platform
+    system = platform.system()
+    if "Darwin" == system:
+        set_pbcopy_clipboard(text)
+    elif "Linux" == system:
+        set_xsel_clipboard(text)
+    else:
+        print(format("I don't know how to set clipboard on %s", system))
 
 
 def parse_configfile(file_name=None):
@@ -127,6 +138,8 @@ def parse_commandline():
         parents=[match_parser])
     get_parser.add_argument('pattern', metavar='<pattern>',
                             help="pattern for the wanted entry")
+    get_parser.add_argument('--clipboard', action="store_true",
+                            help="Set clipboard instead of print to stdout")
 
     ###### Show ##############################################################
     show_parser = subparsers.add_parser(
@@ -202,14 +215,15 @@ if '__main__' == __name__:
         output.pretty_print()
 
     elif args.command in ['g', 'get']:
-        """ - (set clipboard)
-        """
         backends = get_backends(args.directory)
         matcher = get_matcher(args, args.pattern)
         for backend in backends.values():
             password = backend.get_password(matcher)
             if password is not None:
-                print(password)
+                if args.clipboard is True:
+                    set_clipboard(password)
+                else:
+                    print(password)
                 break
 
     elif args.command in ['sh', 'show']:
