@@ -138,7 +138,7 @@ class ClearTextBackend(BaseBackend):
 class GPGBackend(ClearTextBackend):
 
     _gpg = None
-    gpg_binary = None
+    default_gpg_binary = "gpg"
 
     @property
     def gpg(self):
@@ -149,11 +149,20 @@ class GPGBackend(ClearTextBackend):
 
         return self._gpg
 
-    def __init__(self, root_folder, config):
+    def __init__(self, root_folder, config, gpg_binary=None):
         super(GPGBackend, self).__init__(root_folder, config)
 
         self.key_names = set(config.get('gpg', 'keys').strip().split('\n'))
         self.keys = list()
+
+        if gpg_binary is not None:
+            self.gpg_binary = gpg_binary
+        else:
+            self.gpg_binary = self.default_gpg_binary
+
+        self.gpg_binary = config.get('gpg', 'gpg-binary',
+                                     fallback=self.gpg_binary)
+
         for key in self.gpg.list_keys():
             for uid in key.get('uids', []):
                 if uid in self.key_names:
