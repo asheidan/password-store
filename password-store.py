@@ -43,15 +43,16 @@ def parse_configfile(file_name=None):
     """
     log = logging.getLogger('parse_configfile')
     defaults = {
-        'Global': {
+        'global': {
             'directory': '~/.pwstore',
         },
-        'Cleartext Backend': {},
-        'GPG Backend': {
+        'cleartext': {},
+        'gpg': {
             'private key': '',
+            'gpg location': ''
         },
     }
-    parser = configparser.SafeConfigParser(default_section='Global')
+    parser = configparser.SafeConfigParser(default_section='global')
 
     parser.read_dict(defaults)
 
@@ -82,11 +83,11 @@ def parse_commandline():
     """
     log = logging.getLogger('parse_commandline')
 
-    parser = argparse.ArgumentParser(description='Stores information in files.')
-    #parser.add_argument('command', metavar='<command>', choices=COMMANDS,
-    #                    help="""""")
-    #parser.add_argument('args', metavar='<arg>', nargs='*',
-    #                    help="""""")
+    parser = argparse.ArgumentParser(description='Stores information in files')
+    # parser.add_argument('command', metavar='<command>', choices=COMMANDS,
+    #                     help="""""")
+    # parser.add_argument('args', metavar='<arg>', nargs='*',
+    #                     help="""""")
     parser.add_argument('-c', '--config',
                         default='~/.pwstore/configuration',
                         help='which configurationfile to use')
@@ -99,47 +100,60 @@ def parse_commandline():
     # Matchers ###############################################################
     match_parser = argparse.ArgumentParser(add_help=False)
     matchers = match_parser.add_mutually_exclusive_group()
-    matchers.add_argument('-r', '--regexp', help='use regular expression matcher',
+    matchers.add_argument('-r', '--regexp',
+                          help='use regular expression matcher',
                           action='store_true', default=True)
-    matchers.add_argument('-t', '--token', help='use token expression matcher',
-                          action='store_true', default=False)
+    # matchers.add_argument('-t', '--token', help='use token expression matcher',
+    #                       action='store_true', default=False)
 
     # Subparsers #############################################################
-    subparsers = parser.add_subparsers(dest='command',
-            title='subcommands', description='valid subcommands')
+    subparsers = parser.add_subparsers(dest='command', title='subcommands',
+                                       description='valid subcommands')
 
     ###### Create ############################################################
     create_parser = subparsers.add_parser(
-            'create', help='create a new entry',
-            description='''Create a new entry for the given <key> in an existing
-                           backend''')
+        'create', help='create a new entry',
+        description='''Create a new entry for the given <key> in an existing
+                       backend''')
     create_parser.add_argument('storage', metavar='<storage>', help="storage")
-    create_parser.add_argument('key', metavar='<key>', help="key for the new entry")
+    create_parser.add_argument('key', metavar='<key>',
+                               help="key for the new entry")
 
     ###### Get ###############################################################
     get_parser = subparsers.add_parser(
-            'get', aliases=['g'], help='get password (first line) from an entry',
-            description='Get the password (first line) from an entry described by <pattern>',
-            parents=[match_parser])
-    get_parser.add_argument('pattern', metavar='<pattern>', help="pattern for the wanted entry")
+        'get', aliases=['g'], help='get password (first line) from an entry',
+        description=('Get the password (first line) from an entry described '
+                     'by <pattern>'),
+        parents=[match_parser])
+    get_parser.add_argument('pattern', metavar='<pattern>',
+                            help="pattern for the wanted entry")
 
     ###### Show ##############################################################
     show_parser = subparsers.add_parser(
-            'show', aliases=['sh'], help='show an entry',
-            description='show the entry described by <pattern>',
-            parents=[match_parser])
-    show_parser.add_argument('pattern', metavar='<pattern>', help="pattern for the wanted entry")
+        'show', aliases=['sh'], help='show an entry',
+        description='show the entry described by <pattern>',
+        parents=[match_parser])
+    show_parser.add_argument('-c', '--stdout', help='print password on stdout',
+                             action='store_true', default=False)
+    show_parser.add_argument('pattern', metavar='<pattern>',
+                             help="pattern for the wanted entry")
 
     ###### List ##############################################################
     list_parser = subparsers.add_parser(
-            'list', aliases=['ls'], help='list keys',
-            description='show keys matching <pattern> (or all)',
-            parents=[match_parser])
+        'list', aliases=['ls'], help='list keys',
+        description='show keys matching <pattern> (or all)',
+        parents=[match_parser])
     list_parser.add_argument('pattern', metavar='<pattern>', help='pattern',
                              nargs='?', default='')
     ###### Help ##############################################################
     help_parser = subparsers.add_parser('help', help='show help')
     help_parser.add_argument('help_command', metavar='command', nargs='?')
+
+    try:
+        import argcomplete
+        argcomplete.autocomplete(parser)
+    except ImportError:
+        log.debug("No argcomplete found")
 
     args = parser.parse_args()
     if 'help' == args.command:
@@ -150,11 +164,14 @@ def parse_commandline():
 
         sys.exit(0)
 
+    args.config = os.path.expanduser(args.config)
+    log.debug("Configfile is %s", args.config)
+
+    configuration = parse_configfile(args.config)
+
+    log.debug("args: %s", args)
+
     return args
-
-
-def create():
-    pass
 
 
 ###############################################################################
