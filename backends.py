@@ -46,6 +46,7 @@ class ClearTextBackend(BaseBackend):
         for path, subs, files in walker:
             for file in files:
                 if (not file.startswith('.') and
+                        not file.endswith("~") and
                         not file.startswith(CONFIG_FILE_NAME)):
                     yield os.path.join(path, file)
 
@@ -71,7 +72,7 @@ class ClearTextBackend(BaseBackend):
             common_path = current_path
 
             for filename in files:
-                if (not filename.startswith('.') and
+                if (not filename.startswith('.') and not filename.endswith("~") and
                         not filename.startswith(CONFIG_FILE_NAME)):
                     key = os.path.join(path, filename)
                     if matcher is None or matcher.matches(key):
