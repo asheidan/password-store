@@ -89,7 +89,7 @@ def parse_configfile(file_name=None):
     return parser
 
 
-def parse_commandline():
+def parse_commandline(command_line):
     """ Parse arguments and return configuration
     """
     log = logging.getLogger('parse_commandline')
@@ -107,6 +107,10 @@ def parse_commandline():
                         default='~/.pwstore/storage',
                         help=('directory with storage backends (if different '
                               'from default or configuration)'))
+
+    # parser.add_argument('--debug', nargs=1, metavar="DEBUGLEVEL",
+    #                     default='INFO',
+    #                     help=("The debug level to use for logging"))
 
     # Matchers ###############################################################
     match_parser = argparse.ArgumentParser(add_help=False)
@@ -168,7 +172,7 @@ def parse_commandline():
     except ImportError:
         log.debug("No argcomplete found")
 
-    args = parser.parse_args()
+    args = parser.parse_args(command_line[1:])
     if 'help' == args.command:
         if args.help_command is None:
             parser.print_help()
@@ -176,11 +180,6 @@ def parse_commandline():
             subparsers.choices.get(args.help_command, parser).print_help()
 
         sys.exit(0)
-
-    args.config = os.path.expanduser(args.config)
-    log.debug("Configfile is %s", args.config)
-
-    configuration = parse_configfile(args.config)
 
     log.debug("args: %s", args)
 
@@ -191,18 +190,23 @@ def parse_commandline():
 
 if '__main__' == __name__:
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
 
     formatter = logging.Formatter('%(asctime)s - %(name)s -'
                                   ' %(levelname)s - %(message)s')
 
     console = logging.StreamHandler()
-    console.setLevel(logging.DEBUG)
+    console.setLevel(logging.INFO)
     console.setFormatter(formatter)
 
     logger.addHandler(console)
 
-    args = parse_commandline()
+    args = parse_commandline(sys.argv)
+
+    config_path = os.path.expanduser(args.config)
+    log.debug("Configfile is %s", config_path)
+
+    configuration = parse_configfile(config_path)
 
     output = Output()
 
@@ -234,6 +238,7 @@ if '__main__' == __name__:
             if password is not None:
                 print(password)
                 break
+
     elif args.command in ['create']:
         backends = get_backends(args.directory)
         backend = backends.get(args.storage, None)
